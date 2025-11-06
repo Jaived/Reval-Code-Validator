@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Reval Code Validator</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <script>
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        // Trigger validate button click
+        document.querySelector('[data-validate-btn]')?.click();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 's' && window.location.pathname.includes('/report')) {
+        e.preventDefault();
+        // Trigger JSON export button click
+        document.querySelector('[data-export-json-btn]')?.click();
+      }
+    });
+  </script>
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>

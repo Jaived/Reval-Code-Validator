@@ -1,0 +1,13 @@
+declare module 'file-saver';
+declare module 'html2canvas';
+declare module 'jspdf';
+declare module 'diff-match-patch';
+declare module 'css-tree';
+declare module './app/features/validate/validate-page.component';
+declare module './app/features/compare-css/compare-css-page.component';
+declare module './app/features/report/report-page.component';
+declare module './features/validate/validate-page.component';
+declare module './features/compare-css/compare-css-page.component';
+declare module './features/report/report-page.component';
+declare module './features/*';
+declare module './app/features/*';

@@ -1,0 +1,138 @@
+/* Import Bootstrap for a polished base UI */
+@import "bootstrap/dist/css/bootstrap.min.css";
+
+:root {
+  --brand: #2563eb;
+  --muted: #6b7280;
+  --bg: #f8fafc;
+  --card-bg: #ffffff;
+  --surface: #ffffff;
+  --text: #0f1724;
+  --accent: #06b6d4;
+}
+
+/* Dark theme overrides applied when <html> has class 'dark' */
+.dark {
+  --brand: #0ea5a4;
+  --muted: #9ca3af;
+  --bg: #0b1220;
+  --card-bg: #071029;
+  --surface: #071029;
+  --text: #e6eef8;
+  --accent: #06b6d4;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, Roboto, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* App shell tweaks */
+.app-header {
+  background: linear-gradient(90deg, rgba(37,99,235,1) 0%, rgba(6,182,212,1) 100%);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(37,99,235,0.12);
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+.app-nav .nav-link {
+  color: rgba(255,255,255,0.92);
+  margin-right: .75rem;
+  padding: .4rem .6rem;
+  border-radius: .375rem;
+  transition: background .15s ease, transform .08s ease;
+}
+.app-nav .nav-link:hover {
+  background: rgba(255,255,255,0.06);
+  transform: translateY(-1px);
+}
+.app-nav .nav-link.active {
+  background: rgba(255,255,255,0.12);
+  box-shadow: inset 0 -2px 0 rgba(255,255,255,0.08);
+}
+
+.brand {
+  font-weight: 700; letter-spacing: .2px; display:flex; align-items:center; gap: .6rem;
+}
+.brand-logo {
+  width:36px; height:36px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.12);
+  box-shadow: 0 4px 10px rgba(2,6,23,0.16); font-weight:700; color:#fff;
+}
+.brand-tag { font-size: .85rem; color: rgba(255,255,255,0.9); }
+
+.nav-actions { display:flex; align-items:center; gap:.5rem; }
+.search-input { width:220px; max-width:40vw; }
+
+@media (max-width: 767px) {
+  .app-nav .nav-link { display:block; padding:.5rem .75rem; }
+  .search-input { display:none; }
+}
+
+.brand { font-weight: 700; letter-spacing: .2px; }
+
+/* Card styles for panels */
+.panel-card {
+  background: var(--card-bg);
+  border-radius: .6rem;
+  box-shadow: 0 8px 24px rgba(16,24,40,0.08);
+  padding: 1rem;
+}
+
+.results-panel { max-height: 60vh; overflow: auto; }
+
+/* Buttons */
+.btn-primary-app { background: var(--brand); border: none; color: #fff; }
+.btn-secondary-app { background: var(--muted); border: none; color: #fff; }
+
+/* Monaco editor fill */
+ngx-monaco-editor { display: block; height: 100%; }
+
+/* Make panel-card that is intended to fill its column use flex so children can stretch */
+.panel-card.h-100 { display: flex; flex-direction: column; min-height: 0; }
+
+/* Ensure ngx-monaco-editor and its internal container stretch to fill available space */
+.panel-card.h-100 ngx-monaco-editor { flex: 1 1 auto; height: 100% !important; min-height: 0; display: block; }
+.panel-card.h-100 ngx-monaco-editor .editor-container { height: 100% !important; min-height: 0; }
+.panel-card.h-100 ngx-monaco-editor .editor-container > div { height: 100% !important; min-height: 0; }
+
+/* Profile avatar button */
+.profile-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(2,6,23,0.12);
+  border: 1px solid rgba(2,6,23,0.06);
+}
+.profile-btn:hover {
+  transform: translateY(-1px);
+}
+.profile-initial {
+  display:inline-block;
+  width:28px;
+  height:28px;
+  line-height:28px;
+  border-radius:50%;
+  background:#e9eefb;
+  color:#08306b;
+  text-align:center;
+  font-weight:600;
+}
+
+/* Responsive tweaks */
+@media (max-width: 767px) {
+  .results-panel { max-height: 40vh; }
+}
+
+/* Small helpers kept for compatibility */
+.text-muted-small { color: #6b7280; font-size: .9rem; }
+

@@ -1,0 +1,10 @@
+.header {
+  background: #f0f0f0;
+  padding: 20px;
+  color: #333;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
