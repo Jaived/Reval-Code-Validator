@@ -13,6 +13,14 @@ let ts: any = null;
   providedIn: 'root'
 })
 export class ValidationService {
+  // Helper to perform a runtime-only dynamic import that is harder for bundlers to statically analyze.
+  // Using the Function constructor prevents many bundlers from resolving the specifier at build time
+  // and avoids pulling node-only modules (like 'typescript') into the client bundle.
+  private async runtimeImport(spec: string): Promise<any> {
+    // eslint-disable-next-line no-new-func
+    const fn = new Function('s', 'return import(s)');
+    return fn(spec);
+  }
   private lastValidationSubject = new BehaviorSubject<ValidationReport | null>(null);
   lastValidation$ = this.lastValidationSubject.asObservable();
 
@@ -109,7 +117,7 @@ export class ValidationService {
       // lazy-load css-tree
       if (!cssTree) {
         try {
-          cssTree = await import('css-tree');
+          cssTree = await this.runtimeImport('css-tree');
         } catch (e) {
           cssTree = null;
         }
@@ -224,7 +232,7 @@ export class ValidationService {
       // lazy-load TypeScript compiler
       if (!ts) {
         try {
-          ts = await import('typescript');
+          ts = await this.runtimeImport('typescript');
         } catch (e) {
           ts = null;
         }
