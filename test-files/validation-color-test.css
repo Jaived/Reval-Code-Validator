@@ -16,7 +16,7 @@
 
 /* Empty declaration (warning) - yellow */
 .empty-value {
-  height: ;
+  /* height: ; */
   width: 100px;
 }
 
