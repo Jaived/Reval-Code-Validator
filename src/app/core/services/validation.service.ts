@@ -2,10 +2,7 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { ValidationIssue, ValidationReport, QuickFix, Range } from '../interfaces/validation.interface';
 import * as csstree from 'css-tree';
-
-// Load some heavy/optional libraries dynamically to avoid build-time errors
-// when types or packages are missing in some environments.
-let htmlhint: any = null;
+import { HTMLHint } from 'htmlhint';
 
 @Injectable({
   providedIn: 'root'
@@ -17,29 +14,18 @@ export class ValidationService {
   constructor() {}
 
   async validateHtml(code: string): Promise<ValidationIssue[]> {
-    // lazy-load htmlhint
-    if (!htmlhint) {
-      try {
-        const mod = await import('htmlhint');
-        // htmlhint exports HTMLHint
-        htmlhint = mod;
-      } catch (e) {
-        htmlhint = null;
-      }
-    }
-
-    if (htmlhint && htmlhint.HTMLHint) {
-      const results = htmlhint.HTMLHint.verify(code, {
-      'tagname-lowercase': true,
-      'attr-lowercase': true,
-      'attr-value-double-quotes': true,
-      'doctype-first': true,
-      'tag-pair': true,
-      'spec-char-escape': true,
-      'id-unique': true,
-      'src-not-empty': true,
-      'attr-no-duplication': true
-    });
+    try {
+      const results = HTMLHint.verify(code, {
+        'tagname-lowercase': true,
+        'attr-lowercase': true,
+        'attr-value-double-quotes': true,
+        'doctype-first': true,
+        'tag-pair': true,
+        'spec-char-escape': true,
+        'id-unique': true,
+        'src-not-empty': true,
+        'attr-no-duplication': true
+      });
 
       const mapped = (results as any[]).map((result: any) => ({
         type: result.type as ValidationIssue['type'],
@@ -78,30 +64,31 @@ export class ValidationService {
       }
 
       return mapped;
-    }
+    } catch (error) {
+      console.error('HTMLHint validation error:', error);
+      // Fallback: perform basic checks when HTMLHint fails
+      const fallback: ValidationIssue[] = [];
+      if (!code.includes('<') || !code.includes('>')) {
+        fallback.push({ type: 'warning', message: 'Content does not appear to be HTML', line: 1, suggestion: 'Ensure file contains valid HTML tags.', range: { startLine: 1, startColumn: 1 } });
+        return fallback;
+      }
 
-    // Fallback: no htmlhint available — perform a small sanity check and DOM checks
-  const fallback: ValidationIssue[] = [];
-    if (!code.includes('<') || !code.includes('>')) {
-  fallback.push({ type: 'warning', message: 'Content does not appear to be HTML', line: 1, suggestion: 'Ensure file contains valid HTML tags.', range: { startLine: 1, startColumn: 1 } });
+      try {
+        if (typeof DOMParser !== 'undefined') {
+          const doc = new DOMParser().parseFromString(code, 'text/html');
+          const imgs = Array.from(doc.querySelectorAll('img'));
+          imgs.forEach((img: any) => {
+            if (!img.hasAttribute('alt') || img.getAttribute('alt').trim() === '') {
+              fallback.push({ type: 'warning', message: 'Image missing alt attribute', line: 1, ruleId: 'img-alt', suggestion: 'Add descriptive alt="..." to <img> elements.', range: { startLine: 1, startColumn: 1 } });
+            }
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+
       return fallback;
     }
-
-    try {
-      if (typeof DOMParser !== 'undefined') {
-        const doc = new DOMParser().parseFromString(code, 'text/html');
-        const imgs = Array.from(doc.querySelectorAll('img'));
-        imgs.forEach((img: any) => {
-          if (!img.hasAttribute('alt') || img.getAttribute('alt').trim() === '') {
-            fallback.push({ type: 'warning', message: 'Image missing alt attribute', line: 1, ruleId: 'img-alt', suggestion: 'Add descriptive alt="..." to <img> elements.', range: { startLine: 1, startColumn: 1 } });
-          }
-        });
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    return fallback;
   }
 
   private htmlExtraChecks(code: string): ValidationIssue[] {
