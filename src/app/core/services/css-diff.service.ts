@@ -6,6 +6,14 @@ import { BehaviorSubject } from 'rxjs';
 // import errors in environments where the package or its types aren't installed.
 import { CssDuplicate } from '../interfaces/validation.interface';
 
+export interface CodeDuplicate {
+  type: 'selector' | 'id' | 'function' | 'class' | 'variable';
+  name: string;
+  leftCode: string;
+  rightCode: string;
+  hasConflict: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -166,5 +174,228 @@ export class CssDiffService {
       dmpInstance.diff_cleanupSemantic(diff);
     }
     return diff;
+  }
+
+  // Find duplicate IDs and classes in HTML
+  findHtmlDuplicates(htmlA: string, htmlB: string): CodeDuplicate[] {
+    const duplicates: CodeDuplicate[] = [];
+
+    // Extract IDs from both HTML files
+    const idsA = this.extractHtmlIds(htmlA);
+    const idsB = this.extractHtmlIds(htmlB);
+
+    // Find common IDs
+    for (const [id, codeA] of idsA.entries()) {
+      if (idsB.has(id)) {
+        const codeB = idsB.get(id)!;
+        duplicates.push({
+          type: 'id',
+          name: id,
+          leftCode: codeA,
+          rightCode: codeB,
+          hasConflict: codeA !== codeB
+        });
+      }
+    }
+
+    return duplicates;
+  }
+
+  private extractHtmlIds(html: string): Map<string, string> {
+    const ids = new Map<string, string>();
+    const idRegex = /\bid\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
+    let match: RegExpExecArray | null;
+
+    while ((match = idRegex.exec(html))) {
+      const id = (match[1] || match[2] || match[3] || '').trim();
+      if (id) {
+        // Extract the full element containing this id
+        const start = Math.max(0, match.index - 50);
+        const end = Math.min(html.length, match.index + 100);
+        const context = html.substring(start, end).trim();
+        ids.set(id, context);
+      }
+    }
+
+    return ids;
+  }
+
+  // Find duplicate functions and variables in JavaScript
+  findJsDuplicates(jsA: string, jsB: string): CodeDuplicate[] {
+    const duplicates: CodeDuplicate[] = [];
+
+    // Extract functions and variables
+    const functionsA = this.extractJsFunctions(jsA);
+    const functionsB = this.extractJsFunctions(jsB);
+    const variablesA = this.extractJsVariables(jsA);
+    const variablesB = this.extractJsVariables(jsB);
+
+    // Find common functions
+    for (const [name, codeA] of functionsA.entries()) {
+      if (functionsB.has(name)) {
+        const codeB = functionsB.get(name)!;
+        duplicates.push({
+          type: 'function',
+          name,
+          leftCode: codeA,
+          rightCode: codeB,
+          hasConflict: this.normalizeWhitespace(codeA) !== this.normalizeWhitespace(codeB)
+        });
+      }
+    }
+
+    // Find common variables
+    for (const [name, codeA] of variablesA.entries()) {
+      if (variablesB.has(name)) {
+        const codeB = variablesB.get(name)!;
+        duplicates.push({
+          type: 'variable',
+          name,
+          leftCode: codeA,
+          rightCode: codeB,
+          hasConflict: this.normalizeWhitespace(codeA) !== this.normalizeWhitespace(codeB)
+        });
+      }
+    }
+
+    return duplicates;
+  }
+
+  private extractJsFunctions(code: string): Map<string, string> {
+    const functions = new Map<string, string>();
+
+    // Match function declarations and expressions
+    const functionRegex = /function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/g;
+    const arrowFunctionRegex = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g;
+
+    let match: RegExpExecArray | null;
+
+    while ((match = functionRegex.exec(code))) {
+      const name = match[1];
+      const start = match.index;
+      // Try to find the end of the function (simple brace matching)
+      const end = this.findClosingBrace(code, start + match[0].length - 1);
+      if (end > start) {
+        functions.set(name, code.substring(start, end + 1).trim());
+      }
+    }
+
+    while ((match = arrowFunctionRegex.exec(code))) {
+      const name = match[1];
+      const start = match.index;
+      // Find end of arrow function
+      const arrowPos = code.indexOf('=>', start);
+      if (arrowPos > 0) {
+        const afterArrow = code.substring(arrowPos + 2).trim();
+        if (afterArrow.startsWith('{')) {
+          const end = this.findClosingBrace(code, arrowPos + 2);
+          if (end > start) {
+            functions.set(name, code.substring(start, end + 1).trim());
+          }
+        } else {
+          // Single expression arrow function
+          const end = code.indexOf(';', arrowPos);
+          if (end > 0) {
+            functions.set(name, code.substring(start, end + 1).trim());
+          }
+        }
+      }
+    }
+
+    return functions;
+  }
+
+  private extractJsVariables(code: string): Map<string, string> {
+    const variables = new Map<string, string>();
+    const variableRegex = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+);/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = variableRegex.exec(code))) {
+      const name = match[1];
+      // Skip if it's an arrow function (already captured)
+      if (!match[2].includes('=>')) {
+        variables.set(name, match[0].trim());
+      }
+    }
+
+    return variables;
+  }
+
+  // Find duplicate classes, interfaces, and functions in TypeScript
+  findTsDuplicates(tsA: string, tsB: string): CodeDuplicate[] {
+    const duplicates: CodeDuplicate[] = [];
+
+    // Extract classes, interfaces, and functions
+    const classesA = this.extractTsClasses(tsA);
+    const classesB = this.extractTsClasses(tsB);
+    const functionsA = this.extractJsFunctions(tsA); // TS functions are like JS
+    const functionsB = this.extractJsFunctions(tsB);
+
+    // Find common classes
+    for (const [name, codeA] of classesA.entries()) {
+      if (classesB.has(name)) {
+        const codeB = classesB.get(name)!;
+        duplicates.push({
+          type: 'class',
+          name,
+          leftCode: codeA,
+          rightCode: codeB,
+          hasConflict: this.normalizeWhitespace(codeA) !== this.normalizeWhitespace(codeB)
+        });
+      }
+    }
+
+    // Find common functions
+    for (const [name, codeA] of functionsA.entries()) {
+      if (functionsB.has(name)) {
+        const codeB = functionsB.get(name)!;
+        duplicates.push({
+          type: 'function',
+          name,
+          leftCode: codeA,
+          rightCode: codeB,
+          hasConflict: this.normalizeWhitespace(codeA) !== this.normalizeWhitespace(codeB)
+        });
+      }
+    }
+
+    return duplicates;
+  }
+
+  private extractTsClasses(code: string): Map<string, string> {
+    const classes = new Map<string, string>();
+    const classRegex = /(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = classRegex.exec(code))) {
+      const name = match[1];
+      const start = match.index;
+      // Find the opening brace
+      const openBrace = code.indexOf('{', start);
+      if (openBrace > 0) {
+        const end = this.findClosingBrace(code, openBrace);
+        if (end > start) {
+          classes.set(name, code.substring(start, end + 1).trim());
+        }
+      }
+    }
+
+    return classes;
+  }
+
+  private findClosingBrace(code: string, startPos: number): number {
+    let depth = 1;
+    for (let i = startPos + 1; i < code.length; i++) {
+      if (code[i] === '{') depth++;
+      else if (code[i] === '}') {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
+  }
+
+  private normalizeWhitespace(code: string): string {
+    return code.replace(/\s+/g, ' ').trim();
   }
 }

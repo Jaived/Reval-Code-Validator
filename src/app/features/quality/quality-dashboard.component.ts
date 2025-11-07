@@ -9,78 +9,148 @@ import { ValidationIssue } from '../../core/interfaces/validation.interface';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="row g-4">
+    <div class="row g-3 g-md-4">
       <div class="col-12">
-        <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between mb-3 gap-2">
           <h4 class="mb-0">Quality Dashboard</h4>
-          <div>
-            <button class="btn btn-sm btn-outline-secondary me-2" (click)="exportIssues()">Export JSON</button>
-            <button class="btn btn-sm btn-outline-primary" (click)="clearFixed()">Clear Fixed Marks</button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" (click)="exportIssues()">
+              <span class="d-none d-sm-inline">Export JSON</span>
+              <span class="d-inline d-sm-none">Export</span>
+            </button>
+            <button class="btn btn-sm btn-outline-primary" (click)="clearFixed()">
+              <span class="d-none d-sm-inline">Clear Fixed</span>
+              <span class="d-inline d-sm-none">Clear</span>
+            </button>
           </div>
         </div>
       </div>
 
       <div class="col-12">
         <div *ngIf="(validationService.lastValidation$ | async) as report; else empty" class="panel-card">
-          <div class="row g-3">
+          <!-- Stats Cards -->
+          <div class="row g-2 g-md-3 mb-3">
             <div class="col-4">
               <div class="card p-2 text-center">
-                <div class="h2 text-danger mb-0">{{ report.summary.errors }}</div>
+                <div class="h3 mb-0 text-danger">{{ report.summary.errors }}</div>
                 <div class="small text-muted">Errors</div>
               </div>
             </div>
             <div class="col-4">
               <div class="card p-2 text-center">
-                <div class="h2 text-warning mb-0">{{ report.summary.warnings }}</div>
+                <div class="h3 mb-0 text-warning">{{ report.summary.warnings }}</div>
                 <div class="small text-muted">Warnings</div>
               </div>
             </div>
             <div class="col-4">
               <div class="card p-2 text-center">
-                <div class="h2 text-info mb-0">{{ report.summary.info }}</div>
+                <div class="h3 mb-0 text-info">{{ report.summary.info }}</div>
                 <div class="small text-muted">Info</div>
               </div>
             </div>
           </div>
 
-          <hr />
-
-          <div class="mb-3 d-flex gap-2 align-items-center">
-            <div class="small text-muted">Language: <strong>{{ report.language }}</strong></div>
-            <div class="small text-muted">Timestamp: <strong>{{ report.timestamp }}</strong></div>
-            <div class="ms-auto small text-muted">Issues: <strong>{{ report.issues.length }}</strong></div>
+          <!-- Metadata -->
+          <div class="mb-3 pb-3 border-bottom d-flex flex-wrap gap-3 align-items-center small">
+            <div class="text-muted">
+              <strong>Language:</strong> {{ report.language }}
+            </div>
+            <div class="text-muted d-none d-md-inline">
+              <strong>Timestamp:</strong> {{ report.timestamp }}
+            </div>
+            <div class="ms-auto text-muted">
+              <strong>Total Issues:</strong> {{ report.issues.length }}
+            </div>
           </div>
 
-          <div *ngIf="report.issues?.length === 0" class="text-center text-muted py-3">No issues reported.</div>
+          <!-- No Issues State -->
+          <div *ngIf="report.issues.length === 0" class="text-center text-muted py-5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-3" style="opacity:0.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <div class="h5">No issues found!</div>
+            <p class="small">Your code looks clean.</p>
+          </div>
 
-          <div *ngFor="let issue of report.issues; let i = index" class="mb-2 p-2 rounded" [ngClass]="{
-              'border border-danger bg-light': issue.type === 'error',
-              'border border-warning bg-light': issue.type === 'warning',
-              'border border-info bg-light': issue.type === 'info'
-            }">
-            <div class="d-flex align-items-start">
-              <div style="min-width:0;flex:1">
-                <div class="d-flex align-items-center justify-content-between">
-                  <div class="fw-semibold text-truncate">{{ issue.message }}</div>
-                  <div class="small text-muted">Line {{ issue.line }}<span *ngIf="issue.column">:{{ issue.column }}</span></div>
-                </div>
-                <div class="small text-muted">Rule: {{ issue.ruleId || '—' }}</div>
-                <div class="mt-2">
-                  <div class="small"><strong>Suggestion:</strong> {{ suggestFix(issue) }}</div>
-                </div>
-              </div>
+          <!-- Issues List -->
+          <div *ngFor="let issue of report.issues; let i = index"
+               class="mb-3 p-3 rounded shadow-sm"
+               [ngStyle]="{
+                 'background-color': issue.type === 'error' ? '#fee' : (issue.type === 'warning' ? '#fff3cd' : '#e7f3ff'),
+                 'border-left': '4px solid ' + (issue.type === 'error' ? '#dc3545' : (issue.type === 'warning' ? '#ffc107' : '#0dcaf0'))
+               }">
 
-              <div class="ms-3 text-end">
-                <button class="btn btn-sm btn-outline-success mb-1 me-2" (click)="applyQuickFix(issue)">Apply Quick Fix</button>
-                <button class="btn btn-sm btn-outline-secondary mb-1" (click)="toggleFixed(issue)">{{ isFixed(issue) ? 'Unmark' : 'Mark Fixed' }}</button>
+            <!-- Issue Header -->
+            <div class="d-flex align-items-start justify-content-between mb-2 gap-3">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge"
+                      [ngStyle]="{
+                        'background-color': issue.type === 'error' ? '#dc3545' : (issue.type === 'warning' ? '#ffc107' : '#0dcaf0'),
+                        'color': issue.type === 'warning' ? '#000' : '#fff'
+                      }">
+                  {{ issue.type }}
+                </span>
+                <span class="small text-muted">
+                  Line {{ issue.line }}<span *ngIf="issue.column">:{{ issue.column }}</span>
+                </span>
               </div>
+            </div>
+
+            <!-- Issue Message -->
+            <div class="fw-semibold mb-2" style="color:#212529">
+              {{ issue.message }}
+            </div>
+
+            <!-- Rule ID -->
+            <div class="small text-muted mb-3">
+              <strong>Rule:</strong> <code class="bg-white px-2 py-1 rounded">{{ issue.ruleId || 'N/A' }}</code>
+            </div>
+
+            <!-- Suggestion Box -->
+            <div class="alert alert-light mb-3 py-2 px-3 border">
+              <div class="small">
+                <strong>💡 Suggestion:</strong> {{ suggestFix(issue) }}
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-sm btn-success"
+                      (click)="applyQuickFix(issue)"
+                      title="Apply automatic fix">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Apply Fix
+              </button>
+              <button class="btn btn-sm"
+                      [ngClass]="isFixed(issue) ? 'btn-outline-secondary' : 'btn-outline-primary'"
+                      (click)="toggleFixed(issue)"
+                      [title]="isFixed(issue) ? 'Unmark as fixed' : 'Mark as fixed'">
+                <span *ngIf="isFixed(issue)">✓ Fixed</span>
+                <span *ngIf="!isFixed(issue)">Mark as Fixed</span>
+              </button>
             </div>
           </div>
         </div>
       </div>
 
       <ng-template #empty>
-        <div class="panel-card text-center text-muted">No validation run yet. Open Validate page and run a validation to populate the dashboard.</div>
+        <div class="col-12">
+          <div class="panel-card text-center py-5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-3 text-muted" style="opacity:0.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <h5 class="text-muted mb-2">No Validation Data</h5>
+            <p class="text-muted mb-0">
+              Navigate to the <strong>Validate</strong> page and run a validation to see the quality dashboard.
+            </p>
+          </div>
+        </div>
       </ng-template>
     </div>
   `
@@ -137,25 +207,53 @@ export class QualityDashboardComponent {
   applyQuickFix(issue: ValidationIssue) {
     // Try to call the editor API exposed by the Validate page to apply a quick-fix in-place.
     const api = (globalThis as any).__reval;
+
+    console.log('Attempting to apply fix...', {
+      apiExists: !!api,
+      applyFixExists: api && typeof api.applyFix === 'function',
+      applyQuickFixExists: api && typeof api.applyQuickFix === 'function'
+    });
+
     if (api) {
-  let fn: any = null;
-  if (typeof api.applyFix === 'function') fn = api.applyFix;
-  else if (typeof api.applyQuickFix === 'function') fn = api.applyQuickFix;
-  if (fn) {
+      let fn: any = null;
+      if (typeof api.applyFix === 'function') fn = api.applyFix;
+      else if (typeof api.applyQuickFix === 'function') fn = api.applyQuickFix;
+      if (fn) {
+        this.toast.show({ body: 'Applying fix...', variant: 'info', timeout: 1500 });
         Promise.resolve(fn(issue)).then(() => {
-          this.toast.show({ body: 'Applied quick fix to the editor (if available).', variant: 'success', timeout: 2000 });
+          this.toast.show({
+            body: `✓ Fix applied successfully! The issue has been resolved in the Validate page.`,
+            variant: 'success',
+            timeout: 3000
+          });
+          // Automatically mark as fixed after successful application
+          setTimeout(() => {
+            this.toggleFixed(issue);
+          }, 500);
         }).catch((e: any) => {
-          console.warn('applyQuickFix error', e);
-          this.toast.show({ body: 'Quick fix failed to apply in editor.', variant: 'danger', timeout: 3000 });
+          console.error('applyQuickFix error', e);
+          this.toast.show({
+            body: 'Failed to apply fix. Please try manually in the Validate page.',
+            variant: 'danger',
+            timeout: 3000
+          });
         });
         return;
+      } else {
+        console.warn('API exists but no valid function found', api);
       }
+    } else {
+      console.warn('__reval API not found on globalThis');
     }
 
     // Fallback: copy suggested fix to clipboard.
     const suggestion = this.suggestFix(issue);
     if (navigator.clipboard) navigator.clipboard.writeText(suggestion).then(() => console.info('Suggestion copied')).catch(() => {});
-    this.toast.show({ body: 'Quick fix suggestion copied to clipboard.', variant: 'info', timeout: 3000 });
+    this.toast.show({
+      body: 'Editor API not available. Please navigate to the Validate page first. Suggestion copied to clipboard.',
+      variant: 'warning',
+      timeout: 4000
+    });
   }
 
   exportIssues() {

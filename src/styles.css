@@ -72,9 +72,160 @@ body {
 @media (max-width: 767px) {
   .app-nav .nav-link { display:block; padding:.5rem .75rem; }
   .search-input { display:none; }
+  .results-panel { max-height: 40vh; }
+
+  /* Stack editor and results vertically on mobile */
+  .col-12.col-lg-8, .col-12.col-lg-4 {
+    height: auto !important;
+  }
+
+  /* Reduce editor height on mobile for better scrolling */
+  .panel-card.h-100 {
+    min-height: 300px !important;
+    max-height: 400px;
+  }
+
+  /* Make buttons stack better on mobile */
+  .btn-group-sm .btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Adjust file info display */
+  .text-truncate {
+    max-width: 150px !important;
+  }
+
+  /* Make stat cards more compact */
+  .card .h3, .card .h2 {
+    font-size: 1.5rem;
+  }
+
+  .card .small {
+    font-size: 0.75rem;
+  }
 }
 
-.brand { font-weight: 700; letter-spacing: .2px; }
+@media (max-width: 576px) {
+  /* Extra small devices - phones in portrait */
+  .brand-tag {
+    display: none !important;
+  }
+
+  .brand {
+    font-size: 0.9rem;
+  }
+
+  .app-nav .nav-link {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.5rem;
+    margin-right: 0.25rem;
+  }
+
+  .nav-actions button {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .nav-actions .btn span {
+    display: none;
+  }
+
+  .profile-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .profile-initial {
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    font-size: 0.75rem;
+  }
+
+  /* Hide less critical buttons on very small screens */
+  .btn-outline-secondary.btn-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Stack action buttons */
+  .d-flex.gap-2, .d-flex.gap-3 {
+    flex-wrap: wrap;
+  }
+
+  /* Compact form controls */
+  .form-select-sm {
+    font-size: 0.8rem;
+  }
+
+  /* Reduce padding on cards */
+  .panel-card {
+    padding: 0.75rem;
+  }
+
+  /* Make issue cards more compact */
+  .mb-3.p-3 {
+    padding: 0.75rem !important;
+  }
+
+  /* Stack issue action buttons vertically */
+  .ms-3.d-flex.flex-column {
+    margin-left: 0.5rem !important;
+  }
+
+  .ms-3.d-flex.flex-column .btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  /* Tablets */
+  .col-12.col-lg-8 {
+    height: 50vh !important;
+  }
+
+  .col-12.col-lg-4 {
+    height: auto;
+    max-height: 50vh;
+  }
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+  /* Increase tap targets on touch devices */
+  .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .btn-sm {
+    min-height: 38px;
+    min-width: 38px;
+  }
+
+  .nav-link {
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Improve scrolling on touch devices */
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Landscape phone optimizations */
+@media (max-width: 767px) and (orientation: landscape) {
+  .panel-card.h-100 {
+    max-height: 250px;
+  }
+
+  .results-panel {
+    max-height: 30vh;
+  }
+}
 
 /* Card styles for panels */
 .panel-card {
@@ -131,8 +282,46 @@ ngx-monaco-editor { display: block; height: 100%; }
 /* Responsive tweaks */
 @media (max-width: 767px) {
   .results-panel { max-height: 40vh; }
+
+  /* Ensure container has proper padding on mobile */
+  .container, .container-fluid {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
 }
 
 /* Small helpers kept for compatibility */
 .text-muted-small { color: #6b7280; font-size: .9rem; }
 
+/* Utility classes for responsive text */
+.h2-md {
+  font-size: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .h2-md {
+    font-size: 2rem;
+  }
+}
+
+/* Prevent horizontal scroll on mobile */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* Better scrolling on touch devices */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Improve Monaco editor display on mobile */
+@media (max-width: 767px) {
+  .monaco-editor .view-lines {
+    font-size: 12px !important;
+  }
+
+  .monaco-editor .margin {
+    width: 40px !important;
+  }
+}

@@ -1,0 +1,41 @@
+/* CSS Test File with Errors and Warnings */
+
+/* Empty rule (warning) - yellow */
+.empty-class { }
+
+/* Duplicate properties (warning) - yellow */
+.duplicate-props {
+  background-color: red;
+  padding: 10px;
+  background-color: blue;
+  margin: 20px;
+}
+
+/* Another empty rule (warning) */
+#empty-id { }
+
+/* Empty declaration (warning) - yellow */
+.empty-value {
+  height: ;
+  width: 100px;
+}
+
+/* Multiple duplicates (warnings) */
+.many-duplicates {
+  color: red;
+  font-size: 14px;
+  color: blue;
+  padding: 10px;
+  font-weight: bold;
+  font-weight: normal;
+}
+
+/* Empty rule */
+.another-empty { }
+
+/* Duplicate background-color (warning) */
+.header {
+  background-color: #fff;
+  color: #333;
+  background-color: #000;
+}

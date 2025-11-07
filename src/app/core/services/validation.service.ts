@@ -1,26 +1,16 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { ValidationIssue, ValidationReport, QuickFix, Range } from '../interfaces/validation.interface';
+import * as csstree from 'css-tree';
+
 // Load some heavy/optional libraries dynamically to avoid build-time errors
 // when types or packages are missing in some environments.
 let htmlhint: any = null;
-let postcss: any = null;
-let safeParser: any = null;
-let cssTree: any = null;
-let ts: any = null;
 
 @Injectable({
   providedIn: 'root'
 })
 export class ValidationService {
-  // Helper to perform a runtime-only dynamic import that is harder for bundlers to statically analyze.
-  // Using the Function constructor prevents many bundlers from resolving the specifier at build time
-  // and avoids pulling node-only modules (like 'typescript') into the client bundle.
-  private async runtimeImport(spec: string): Promise<any> {
-    // eslint-disable-next-line no-new-func
-    const fn = new Function('s', 'return import(s)');
-    return fn(spec);
-  }
   private lastValidationSubject = new BehaviorSubject<ValidationReport | null>(null);
   lastValidation$ = this.lastValidationSubject.asObservable();
 
@@ -61,6 +51,10 @@ export class ValidationService {
         range: { startLine: result.line, startColumn: result.col }
       } as ValidationIssue));
 
+      // Additional HTML checks (DOMParser + regex helpers) to catch issues htmlhint may miss or to ensure
+      // we map them reliably to line numbers.
+      const extra = this.htmlExtraChecks(code);
+      mapped.push(...extra);
       // Additional lightweight DOM-based checks (browser only)
       try {
         if (typeof DOMParser !== 'undefined') {
@@ -110,21 +104,89 @@ export class ValidationService {
     return fallback;
   }
 
+  private htmlExtraChecks(code: string): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+    const lines = code.split(/\r?\n/);
+
+    // Helper to find line number by index
+    const lineOf = (idx: number) => {
+      const prefix = code.slice(0, idx);
+      return prefix.split(/\r?\n/).length;
+    };
+
+    // 1) Duplicate id across document
+    const idRegex = /\bid\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
+    const ids = new Map<string, number[]>();
+    let m: RegExpExecArray | null;
+    while ((m = idRegex.exec(code))) {
+      const id = (m[1] || m[2] || m[3] || '').trim();
+      if (!id) continue;
+      const ln = lineOf(m.index);
+      if (!ids.has(id)) ids.set(id, []);
+      ids.get(id)!.push(ln);
+    }
+    for (const [id, arr] of ids.entries()) {
+      if (arr.length > 1) {
+        for (const ln of arr) {
+          issues.push({ type: 'warning', message: `Duplicate id '${id}'`, line: ln, ruleId: 'html-duplicate-id', suggestion: `Ensure id='${id}' is unique.`, range: { startLine: ln } });
+        }
+      }
+    }
+
+    // 2) img missing alt
+    const imgRegex = /<img\b[^>]*>/gi;
+    while ((m = imgRegex.exec(code))) {
+      const tag = m[0];
+      if (!/\balt\s*=/.test(tag)) {
+        const ln = lineOf(m.index);
+        issues.push({ type: 'warning', message: 'Image missing alt attribute', line: ln, ruleId: 'img-alt', suggestion: 'Add descriptive alt="..." to <img> elements.', range: { startLine: ln } });
+      }
+    }
+
+    // 3) duplicate attribute names in a single tag (e.g., duplicate class)
+    const tagRegex = /<([a-zA-Z0-9-]+)\b([^>]*)>/gi;
+    while ((m = tagRegex.exec(code))) {
+      const attrs = m[2] || '';
+      const attrRegex = /([\w:-]+)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^>\s]+))?/g;
+      const seen = new Map<string, number>();
+      let a: RegExpExecArray | null;
+      while ((a = attrRegex.exec(attrs))) {
+        const name = a[1];
+        const absIndex = m.index + a.index;
+        const ln = lineOf(absIndex);
+        if (!seen.has(name)) seen.set(name, ln); else {
+          issues.push({ type: 'warning', message: `Duplicate attribute '${name}' on <${m[1]}>`, line: ln, ruleId: 'html-duplicate-attr', suggestion: `Remove duplicated '${name}' attribute.`, range: { startLine: ln } });
+        }
+      }
+    }
+
+    // 4) simple unclosed tag detection (best-effort): track opening/closing tags for non-void elements
+    const voids = new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
+    const tagAll = /<\/?([a-zA-Z0-9-]+)(?:\s[^>]*)?>/g;
+    const stack: Array<{tag:string; idx:number}> = [];
+    while ((m = tagAll.exec(code))) {
+      const full = m[0];
+      const name = m[1].toLowerCase();
+      if (full.startsWith('</')) {
+        if (stack.length && stack[stack.length-1].tag === name) stack.pop();
+      } else {
+        if (!voids.has(name)) stack.push({ tag: name, idx: m.index });
+      }
+    }
+    for (const s of stack) {
+      const ln = lineOf(s.idx);
+      issues.push({ type: 'error', message: `Unclosed tag <${s.tag}>`, line: ln, ruleId: 'html-unclosed-tag', suggestion: `Add closing </${s.tag}>.`, range: { startLine: ln } });
+    }
+
+    return issues;
+  }
+
   async validateCss(code: string): Promise<ValidationIssue[]> {
     const issues: ValidationIssue[] = [];
 
     try {
-      // lazy-load css-tree
-      if (!cssTree) {
-        try {
-          cssTree = await this.runtimeImport('css-tree');
-        } catch (e) {
-          cssTree = null;
-        }
-      }
-
-      if (!cssTree) {
-        // If css-tree not available, return a parse-warning
+      // Use css-tree which is now imported at the top
+      if (!csstree) {
         issues.push({ type: 'warning', message: 'CSS parsing not available (css-tree missing)', line: 1, ruleId: 'css-parser-missing' });
         return issues;
       }
@@ -133,60 +195,72 @@ export class ValidationService {
       // css-tree supports a `positions: true` option to populate location info.
       let ast: any;
       try {
-        ast = cssTree.parse(code, { positions: true });
+        ast = csstree.parse(code, { positions: true });
       } catch (e) {
         // fallback to default parse if option not supported
-        ast = cssTree.parse(code);
+        ast = csstree.parse(code);
       }
       // collect selector -> declarations map for duplicate/conflict detection
       const selectorMap = new Map<string, Array<{ prop: string; value: string; line: number }>>();
 
-      cssTree.walk(ast, {
-        visit: 'Rule',
-        enter: (node: any) => {
-          // Check for empty rules
-          if (!node.block.children.length) {
-            const lineNum = node.loc?.start.line || 1;
-            issues.push({
-              type: 'warning',
-              message: 'Empty rule',
-              line: lineNum,
-              ruleId: 'css-empty-rule',
-              range: { startLine: lineNum }
-            });
-          }
-
-          // Collect declarations for this rule
-          const selector = cssTree.generate(node.prelude || node.selector || node.rule || node); // fallback
-          const decls: Array<{ prop: string; value: string; line: number }> = [];
-          cssTree.walk(node, {
-            visit: 'Declaration',
-            enter: (decl: any) => {
-              const prop = decl.property;
-              const val = cssTree.generate(decl.value || decl);
-              const line = decl.loc?.start.line || 1;
-              // duplicate property detection within same rule
-              const dup = decls.find(d => d.prop === prop);
-              if (dup) {
-                const fix: QuickFix = {
-                  title: `Remove duplicate property ${prop}`,
-                  edit: { range: { startLine: line, startColumn: 1, endLine: line, endColumn: 9999 }, newText: '' },
-                  confidence: 'high',
-                  isSafe: true
-                };
-                issues.push({ type: 'warning', message: `Duplicate property '${prop}'`, line, ruleId: 'css-duplicate-property', suggestion: `Remove duplicate '${prop}' or merge values.`, range: { startLine: line, startColumn: 1 }, fix });
-              }
-              decls.push({ prop, value: val, line });
+      try {
+        csstree.walk(ast, {
+          visit: 'Rule',
+          enter(node: any) {
+            const lineNum = node.loc && node.loc.start ? node.loc.start.line : 1;
+            const hasChildren = node.block && node.block.children && typeof node.block.children.getSize === 'function'
+              ? node.block.children.getSize()
+              : (node.block && node.block.children ? node.block.children.length : 0);
+            if (!hasChildren) {
+              issues.push({ type: 'warning', message: 'Empty rule', line: lineNum, ruleId: 'css-empty-rule', range: { startLine: lineNum } });
             }
-          });
 
-          if (selector && decls.length) {
-            const key = selector.toString();
-            if (!selectorMap.has(key)) selectorMap.set(key, []);
-            selectorMap.get(key)!.push(...decls);
+            const decls: Array<{ prop: string; value: string; line: number }> = [];
+            const selector = (() => {
+              try { return csstree.generate(node.prelude || node.selector || node.rule || node); } catch { return String(node); }
+            })();
+
+            try {
+              csstree.walk(node, {
+                visit: 'Declaration',
+                enter(decl: any) {
+                  const prop = decl.property || '<unknown>';
+                  let val = '';
+                  try { val = csstree.generate(decl.value || decl); } catch { val = '' + (decl.value || ''); }
+                  const ln = decl.loc && decl.loc.start ? decl.loc.start.line : lineNum;
+                  const raw = (val || '').toString().trim();
+                  if (!raw || /^;?$/.test(raw)) {
+                    issues.push({ type: 'warning', message: `Empty declaration for '${prop}'`, line: ln, ruleId: 'css-empty-declaration', suggestion: `Provide a value for '${prop}' or remove the declaration.`, range: { startLine: ln, startColumn: 1 } });
+                  }
+                  const dup = decls.find(d => d.prop === prop);
+                  if (dup) {
+                    const fix: QuickFix = {
+                      title: `Remove duplicate property ${prop}`,
+                      edit: { range: { startLine: ln, startColumn: 1, endLine: ln, endColumn: 9999 }, newText: '' },
+                      confidence: 'high',
+                      isSafe: true
+                    };
+                    issues.push({ type: 'warning', message: `Duplicate property '${prop}'`, line: ln, ruleId: 'css-duplicate-property', suggestion: `Remove duplicate '${prop}' or merge values.`, range: { startLine: ln, startColumn: 1 }, fix });
+                  }
+                  decls.push({ prop, value: val, line: ln });
+                }
+              });
+            } catch (e: any) {
+              // inner walk error — report and continue
+              issues.push({ type: 'error', message: e?.message || String(e), line: lineNum, ruleId: 'css-walk-error', range: { startLine: lineNum } });
+            }
+
+            if (selector && decls.length) {
+              const key = selector.toString();
+              if (!selectorMap.has(key)) selectorMap.set(key, []);
+              selectorMap.get(key)!.push(...decls);
+            }
           }
-        }
-      });
+        });
+      } catch (e: any) {
+        // top-level walk failure
+        issues.push({ type: 'error', message: e?.stack || String(e), line: 1, ruleId: 'css-walk-top-error', range: { startLine: 1 } });
+      }
 
       // Check for duplicate selectors and conflicting declarations
       for (const [sel, decls] of selectorMap.entries()) {
@@ -228,62 +302,132 @@ export class ValidationService {
   async validateTs(code: string): Promise<ValidationIssue[]> {
     const issues: ValidationIssue[] = [];
 
+    // Quick heuristic checks (catch common TS issues even if full compiler diagnostics miss them)
     try {
-      // lazy-load TypeScript compiler
-      if (!ts) {
-        try {
-          ts = await this.runtimeImport('typescript');
-        } catch (e) {
-          ts = null;
+      const lineOf = (idx: number) => code.slice(0, idx).split(/\r?\n/).length;
+
+      // 1) class fields without type declaration (e.g., `name;`)
+      const classFieldRegex = /^[ \t]*(?:public|private|protected|readonly\s+)?([A-Za-z_$][\w$]*)\s*;$/gm;
+      let m: RegExpExecArray | null;
+      while ((m = classFieldRegex.exec(code))) {
+        const name = m[1];
+        const ln = lineOf(m.index);
+        issues.push({ type: 'warning', message: `Class field '${name}' missing type declaration`, line: ln, ruleId: 'ts-missing-field-type', suggestion: `Add a type annotation, e.g. '${name}: string;'.`, range: { startLine: ln } });
+      }
+
+      // 2) typed variable assigned a literal of a different basic type
+      const typedAssignRegex = /\b(?:let|const|var)\s+([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$<>\[\]]*)\s*=\s*("[^"]*"|'[^']*'|`[^`]*`|\d+(?:\.\d+)?)/g;
+      while ((m = typedAssignRegex.exec(code))) {
+        const varName = m[1];
+        const declared = (m[2] || '').toLowerCase();
+        const value = m[3] || '';
+        const ln = lineOf(m.index);
+        const isStringLiteral = /^['"`]/.test(value);
+        const isNumberLiteral = /^\d/.test(value);
+        if ((declared === 'number' && isStringLiteral) || (declared === 'string' && isNumberLiteral)) {
+          issues.push({ type: 'error', message: `Type mismatch assigning ${value} to ${declared} '${varName}'`, line: ln, ruleId: 'ts-type-mismatch', suggestion: `Assign a value matching type '${declared}'.`, range: { startLine: ln } });
         }
       }
 
-      if (!ts) {
-        issues.push({ type: 'warning', message: 'TypeScript compiler not available', line: 1, ruleId: 'ts-missing' });
-        return issues;
+      // 3) constructor call type mismatches (best-effort): find class constructor param types and check `new` calls
+      const classCtorRegex = /class\s+([A-Za-z_$][\w$]*)[^{]*\{[\s\S]*?constructor\s*\(([^)]*)\)/g;
+      const newCallRegex = /new\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/g;
+      const ctorMap = new Map<string, string[]>();
+      let c: RegExpExecArray | null;
+      while ((c = classCtorRegex.exec(code))) {
+        const cls = c[1];
+        const params = c[2];
+        const parts: string[] = [];
+        const paramRegex = /[A-Za-z_$][\w$]*\s*:\s*([A-Za-z_$][\w$<>\[\]]*)/g;
+        let p: RegExpExecArray | null;
+        while ((p = paramRegex.exec(params))) {
+          parts.push((p[1] || '').toLowerCase());
+        }
+        if (parts.length) ctorMap.set(cls, parts);
       }
-
-      const { diagnostics } = ts.transpileModule(code, {
-        compilerOptions: {
-          target: ts.ScriptTarget.ESNext,
-          module: ts.ModuleKind.ESNext,
-          strict: true
-        },
-        reportDiagnostics: true
-      });
-
-      if (diagnostics) {
-        diagnostics.forEach((diagnostic: any) => {
-          if (diagnostic.file && diagnostic.start) {
-            const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-            const range: Range = { startLine: line + 1, startColumn: character + 1 };
-            issues.push({
-              type: 'error',
-              message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
-              line: line + 1,
-              column: character + 1,
-              ruleId: `ts-${diagnostic.code}`,
-              suggestion: this.suggestTsFix(diagnostic),
-              range
-            });
+      while ((c = newCallRegex.exec(code))) {
+        const cls = c[1];
+        const args = c[2] || '';
+        const argParts = args.split(',').map(s => s.trim());
+        if (ctorMap.has(cls)) {
+          const expected = ctorMap.get(cls)!;
+          for (let i = 0; i < Math.min(expected.length, argParts.length); i++) {
+            const expectedType = expected[i];
+            const arg = argParts[i];
+            const ln = lineOf(c.index);
+            const argIsString = /^['"`].*['"`]$/.test(arg);
+            const argIsNumber = /^\d/.test(arg);
+            if ((expectedType === 'string' && argIsNumber) || (expectedType === 'number' && argIsString)) {
+              issues.push({ type: 'error', message: `Constructor argument ${i+1} type mismatch for ${cls} (expected ${expectedType})`, line: ln, ruleId: 'ts-constructor-arg-type', suggestion: `Pass a ${expectedType} for parameter ${i+1} when constructing ${cls}.`, range: { startLine: ln } });
+            }
           }
-        });
+        }
       }
-    } catch (error: any) {
-      issues.push({
-        type: 'error',
-        message: error.message,
-        line: 1,
-        ruleId: 'ts-parse-error'
-      });
+    } catch (e) {
+      console.debug('validateTs heuristics failed', e);
     }
 
+    // TypeScript compiler diagnostics are disabled for now to avoid bundling node-only modules
+    // The heuristics above provide basic TypeScript validation without requiring the full compiler
     return issues;
   }
 
   async validateJs(code: string): Promise<ValidationIssue[]> {
-    // For MVP, we'll use the same TypeScript validator but with less strict options
-    return this.validateTs(code);
+    const issues: ValidationIssue[] = [];
+
+    // Heuristic: redeclaration of variables
+    const varRegex = /\b(?:let|var|const)\s+([A-Za-z_$][\w$]*)/g;
+    const names = new Map<string, number[]>();
+    let m: RegExpExecArray | null;
+    const lineOf = (idx: number) => code.slice(0, idx).split(/\r?\n/).length;
+    while ((m = varRegex.exec(code))) {
+      const name = m[1];
+      const ln = lineOf(m.index);
+      if (!names.has(name)) names.set(name, []);
+      names.get(name)!.push(ln);
+    }
+    for (const [n, arr] of names.entries()) {
+      if (arr.length > 1) {
+        for (const ln of arr) {
+          issues.push({ type: 'error', message: `Redeclaration of variable '${n}'`, line: ln, ruleId: 'js-redeclare', suggestion: `Remove duplicate declaration of ${n}.`, range: { startLine: ln } });
+        }
+      }
+    }
+
+    // Assignment inside condition (common bug: if (a = "") )
+    const assignIfRegex = /if\s*\([^)]*=[^=][^)]*\)/g;
+    while ((m = assignIfRegex.exec(code))) {
+      const ln = lineOf(m.index);
+      issues.push({ type: 'error', message: 'Assignment inside conditional (use ==/=== for comparison)', line: ln, ruleId: 'js-assign-in-if', suggestion: 'Use comparison operator (== or ===) instead of assignment.', range: { startLine: ln } });
+    }
+
+    // Missing curly braces after if/for/while (best-effort)
+    const noBraceIf = /if\s*\([^)]*\)\s*[^\s{\n]/g;
+    while ((m = noBraceIf.exec(code))) {
+      const ln = lineOf(m.index);
+      issues.push({ type: 'warning', message: 'Missing curly braces for control statement', line: ln, ruleId: 'js-missing-braces', suggestion: 'Wrap the consequent in { } to avoid accidental bugs.', range: { startLine: ln } });
+    }
+
+    // Duplicate entries in array literals (simple detection)
+    const arrayLit = /=\s*\[([^\]]+)\]/g;
+    while ((m = arrayLit.exec(code))) {
+      const content = m[1];
+      const parts = content.split(',').map(s => s.trim());
+      const seen = new Map<string, number[]>();
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        if (!seen.has(p)) seen.set(p, []);
+        seen.get(p)!.push(i + 1);
+      }
+      for (const [val, idxs] of seen.entries()) {
+        if (idxs.length > 1) {
+          const ln = lineOf(m.index);
+          issues.push({ type: 'warning', message: `Duplicate array entry '${val}'`, line: ln, ruleId: 'js-duplicate-array-entry', suggestion: 'Remove duplicate values from array.', range: { startLine: ln } });
+        }
+      }
+    }
+
+    return issues;
   }
 
   private suggestHtmlFix(ruleId: string | undefined, message: string) {

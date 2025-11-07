@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Test Validation Colors</title>
+</head>
+<body>
+  <!-- Duplicate IDs will be flagged as warnings (yellow) -->
+  <div id="main-content">
+    <h1>Hello World</h1>
+  </div>
+
+  <!-- Duplicate ID (warning) -->
+  <section id="main-content">
+    <p>Duplicate ID here</p>
+  </section>
+
+  <!-- Missing alt attribute (warning) -->
+  <img src="test.jpg">
+
+  <!-- Unclosed tag (error) - red -->
+  <div>
+    <p>This paragraph is not closed
+
+  <!-- Another unclosed tag (error) - red -->
+  <span>Unclosed span
+
+  <!-- Duplicate attribute (warning) -->
+  <input type="text" class="form-control" class="input-field">
+
+</body>
+</html>
