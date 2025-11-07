@@ -15,12 +15,12 @@ import { ValidationIssue } from '../../core/interfaces/validation.interface';
           <h4 class="mb-0">Quality Dashboard</h4>
           <div class="d-flex gap-2">
             <button class="btn btn-sm btn-outline-secondary" (click)="exportIssues()">
-              <span class="d-none d-sm-inline">Export JSON</span>
-              <span class="d-inline d-sm-none">Export</span>
+              <span class="d-sm-inline">Export JSON</span>
+              <!-- <span class="d-inline d-sm-none">Export</span> -->
             </button>
             <button class="btn btn-sm btn-outline-primary" (click)="clearFixed()">
-              <span class="d-none d-sm-inline">Clear Fixed</span>
-              <span class="d-inline d-sm-none">Clear</span>
+              <span class="d-sm-inline">Clear Fixed</span>
+              <!-- <span class="d-inline d-sm-none">Clear</span> -->
             </button>
           </div>
         </div>
