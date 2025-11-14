@@ -30,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Angular app
-        run: npm run build -- --base-href /Reval-Code-Validator/
+      - name: Build Angular app for GitHub Pages
+        run: npm run build:github
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
